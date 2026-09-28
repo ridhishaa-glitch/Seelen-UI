@@ -14,7 +14,11 @@ fn main() {
     let sums_path = target_dir.join("SHA256SUMS");
     checksums.write(&sums_path).unwrap();
 
-    if !cfg!(debug_assertions) {
+    let has_signing_key = std::env::var("TAURI_SIGNING_PRIVATE_KEY")
+        .map(|key| !key.trim().is_empty())
+        .unwrap_or(false);
+
+    if !cfg!(debug_assertions) && has_signing_key {
         sign_sha256sums(&sums_path);
     } else {
         std::fs::write(
@@ -22,6 +26,17 @@ fn main() {
             "NOT SIGNED NEEDED FOR DEBUG",
         )
         .unwrap();
+        if !cfg!(debug_assertions) {
+            // Release build without a signing key (e.g. a fork or a local
+            // contributor build that has no access to the secret). Leave the
+            // checksums unsigned instead of aborting the whole build; the
+            // resulting binary runs fine, only auto-updater signatures are
+            // invalid.
+            println!(
+                "cargo:warning=TAURI_SIGNING_PRIVATE_KEY not set; SHA256SUMS left unsigned. \
+                 This is expected for fork/local builds and only affects auto-updates."
+            );
+        }
     }
 
     tauri_build::build();
