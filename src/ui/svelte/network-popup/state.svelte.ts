@@ -24,11 +24,25 @@ subscribe(SeelenEvent.NetworkWlanScanned, ({ payload }) => {
 
 let radios = lazyRune(() => invoke(SeelenCommand.GetRadios));
 subscribe(SeelenEvent.RadiosChanged, radios.setByPayload);
-await radios.init();
+// Degrade gracefully instead of crashing the whole widget if the backend call
+// fails (e.g. a WinRT `E_NOINTERFACE` on adapters without tethering/soft-AP
+// support). An unhandled rejection here aborts module evaluation and leaves the
+// popup stuck reloading forever.
+try {
+  await radios.init();
+} catch (error) {
+  console.error("Failed to initialize radios, falling back to empty list:", error);
+  radios.value = [];
+}
 
 let hotspot = lazyRune(() => invoke(SeelenCommand.GetNetworkHotspot));
 subscribe(SeelenEvent.NetworkHotspotChanged, hotspot.setByPayload);
-await hotspot.init();
+try {
+  await hotspot.init();
+} catch (error) {
+  console.error("Failed to initialize hotspot, falling back to none:", error);
+  hotspot.value = null;
+}
 
 let isScanning = $state(false);
 let selectedSsid = $state<string | null>(null);
